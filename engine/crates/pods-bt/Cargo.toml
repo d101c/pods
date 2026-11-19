@@ -1,0 +1,20 @@
+[package]
+name = "pods-bt"
+description = "AAP socket and BlueZ access for the pods engine (L2CAP, device watch, battery provider)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+pods-proto.workspace = true
+tokio = { workspace = true, features = ["net", "time", "sync", "rt", "macros"] }
+zbus.workspace = true
+futures-util.workspace = true
+libc.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["net", "time", "sync", "rt", "macros", "rt-multi-thread"] }

@@ -1,0 +1,9 @@
+target/
+*.shell-extension.zip
+/extension/schemas/gschemas.compiled
+__pycache__/
+.claude/
+/extension/dist/
+/engine/dist/
+/extension/tools/shell-test/out/*
+!/extension/tools/shell-test/out/*.png

@@ -1,0 +1,160 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+/* Light style: the rules of stylesheet.css with light values. */
+
+/* Battery rings */
+.pods-batteries {
+  spacing: 8px;
+  padding: 12px 6px 10px;
+  margin-bottom: 14px;
+  border-radius: 14px;
+  background-color: rgba(0, 0, 0, 0.06);
+}
+
+.pods-battery { spacing: 6px; }
+
+.pods-ring {
+  width: 52px;
+  height: 52px;
+  -pods-ring-width: 4px;
+  -pods-charging-color: #26a269;
+  -pods-low-color: #e0553f;
+}
+
+.pods-ring-glyph { font-weight: bold; font-size: 1.1em; }
+
+.pods-battery-level { spacing: 3px; }
+.pods-battery-percent { font-weight: bold; font-size: 0.92em; font-feature-settings: "tnum"; }
+.pods-battery.pods-low .pods-battery-percent { color: #c7432c; }
+.pods-charging-icon { icon-size: 12px; color: #26a269; }
+.pods-battery-label { font-size: 0.85em; color: rgba(0, 0, 0, 0.6); }
+
+/* Noise control */
+.pods-section-title {
+  font-weight: bold;
+  font-size: 0.818em;
+  color: rgba(0, 0, 0, 0.65);
+  padding: 0 0 8px 2px;
+}
+
+.pods-noise-control { spacing: 6px; margin-bottom: 6px; }
+
+.button.pods-noise-button {
+  min-height: 72px;
+  padding: 0 2px;
+  border-radius: 14px;
+  background-color: rgba(0, 0, 0, 0.06);
+}
+.button.pods-noise-button:hover { background-color: rgba(0, 0, 0, 0.1); }
+.button.pods-noise-button:active { background-color: rgba(0, 0, 0, 0.15); }
+.button.pods-noise-button:checked {
+  color: -st-accent-fg-color;
+  background-color: -st-accent-color;
+}
+.button.pods-noise-button:checked:hover { background-color: st-lighten(-st-accent-color, 4%); }
+.button.pods-noise-button:checked:active { background-color: st-lighten(-st-accent-color, 9%); }
+.button.pods-noise-button:checked:focus {
+  background-color: st-mix(st-mix(-st-accent-color, #ffffff, 60%), -st-accent-color, 5%);
+}
+
+.pods-noise-button-box { spacing: 6px; }
+.pods-noise-icon { icon-size: 24px; }
+.pods-noise-label { font-size: 0.85em; font-weight: bold; text-align: center; }
+/* Four modes (Adaptive): a little smaller, so that "Transparency" fits. */
+.pods-noise-compact .pods-noise-label { font-size: 0.78em; }
+
+/* Spatial Audio: the same segments as the noise control, then a line of
+   help with Recenter (Main.dc.html) */
+.pods-spatial-title { padding-top: 8px; }
+.pods-spatial-control { margin-bottom: 0; }
+.pods-spatial-hint { spacing: 8px; min-height: 28px; padding: 8px 2px 4px; }
+.pods-spatial-hint-label { font-size: 0.818em; color: rgba(0, 0, 0, 0.65); }
+.button.pods-recenter-button {
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 0.818em;
+  font-weight: bold;
+  background-color: rgba(0, 0, 0, 0.06);
+}
+.button.pods-recenter-button:hover { background-color: rgba(0, 0, 0, 0.1); }
+.button.pods-recenter-button:active { background-color: rgba(0, 0, 0, 0.15); }
+
+/* Conversation Awareness: a switch with a line under its name */
+.pods-switch-subtitle { font-size: 0.818em; color: rgba(0, 0, 0, 0.6); }
+
+/* "Left 9% · Low Battery" under the tile's title */
+.pods-low-battery .quick-toggle:checked .quick-toggle-subtitle { color: #ffd5cc; }
+
+/* Case card: dark in both styles, like the Shell's on-screen displays, whose
+   place it takes at the bottom of the screen. Sizes from CaseCard.dc.html. */
+.pods-case-card {
+  width: 398px;  /* and the border: 400 px */
+  margin-bottom: 4em;
+  border-radius: 28px;
+  color: #ffffff;
+  background-color: rgba(38, 38, 43, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 50px 0 rgba(0, 0, 0, 0.55);
+}
+
+.pods-card-content { padding: 22px 24px 24px; spacing: 14px; }
+.pods-card-art { icon-size: 178px; }
+
+.pods-card-heading { spacing: 4px; }
+.pods-card-title { font-size: 1.364em; font-weight: bold; max-width: 300px; }
+.pods-card-status { spacing: 6px; font-size: 0.886em; color: rgba(255, 255, 255, 0.72); }
+.pods-card-status.pods-connected { color: #8ff0a4; }
+.pods-card-check { icon-size: 14px; color: #57e389; }
+
+.pods-card-batteries { spacing: 34px; padding: 4px 0 2px; }
+.pods-card-battery { spacing: 10px; }
+.pods-card-ring {
+  width: 40px;
+  height: 40px;
+  -pods-ring-width: 3.5px;
+  -pods-charging-color: #57e389;
+  -pods-low-color: #ff7b63;
+}
+.pods-card-ring-icon { icon-size: 16px; }
+.pods-card-ring-glyph { font-weight: bold; font-size: 0.95em; }
+.pods-card-level { spacing: 3px; }
+.pods-card-percent { font-size: 1.023em; font-weight: bold; font-feature-settings: "tnum"; }
+.pods-card-battery.pods-low .pods-card-percent { color: #ff9f8c; }
+.pods-card-bolt { icon-size: 12px; color: #57e389; }
+.pods-card-label { font-size: 0.818em; color: rgba(255, 255, 255, 0.68); }
+
+.button.pods-card-connect,
+.pods-card-connecting {
+  min-height: 44px;
+  margin-top: 4px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-weight: bold;
+}
+.button.pods-card-connect {
+  color: -st-accent-fg-color;
+  background-color: -st-accent-color;
+}
+.button.pods-card-connect:hover { background-color: st-lighten(-st-accent-color, 4%); }
+.button.pods-card-connect:active { background-color: st-lighten(-st-accent-color, 9%); }
+.button.pods-card-connect:focus {
+  box-shadow: inset 0 0 0 2px st-transparentize(st-lighten(-st-accent-color, 30%), 0.2);
+}
+.pods-card-connecting {
+  color: rgba(255, 255, 255, 0.8);
+  background-color: rgba(255, 255, 255, 0.1);
+}
+.pods-card-connecting-box { spacing: 10px; }
+
+.pods-card-close {
+  width: 30px;
+  height: 30px;
+  margin: 14px;
+  border-radius: 999px;
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+.pods-card-close:hover { background-color: rgba(255, 255, 255, 0.16); }
+.pods-card-close:active { background-color: rgba(255, 255, 255, 0.22); }
+.pods-card-close:focus { box-shadow: inset 0 0 0 2px st-transparentize(st-lighten(-st-accent-color, 30%), 0.2); }
+.pods-card-close StIcon { icon-size: 12px; }

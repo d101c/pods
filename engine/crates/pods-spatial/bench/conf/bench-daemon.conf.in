@@ -1,0 +1,76 @@
+# Private PipeWire daemon for the pods-spatial bench (template, see lib.sh).
+# No alsa / bluez / pulse / jack module, no device factory: it cannot reach
+# any sound card or headset. @QUANTUM@ is filled in by make_conf.
+#
+# Two null sinks stand in for the hardware:
+#   fake_airpods   the "AirPods" (the spatial output targets it)
+#   fake_speakers  the laptop speakers (must never receive binaural audio)
+
+context.properties = {
+    core.daemon             = true
+    core.name               = pods-spatial-bench
+    default.clock.rate      = 48000
+    default.clock.allowed-rates = [ 48000 ]
+    default.clock.quantum   = @QUANTUM@
+    default.clock.min-quantum = @QUANTUM@
+    default.clock.max-quantum = @QUANTUM@
+    default.clock.quantum-limit = 8192
+    settings.check-quantum  = false
+    # D-Bus is needed for RTKit only (module-rt below); the session bus seen
+    # by the bench is the private one of dbus-run-session.
+    support.dbus            = true
+    module.x11.bell         = false
+    log.level               = 2
+}
+
+context.spa-libs = {
+    audio.convert.* = audioconvert/libspa-audioconvert
+    support.*       = support/libspa-support
+}
+
+context.modules = [
+    # Real-time data loop, as in the session daemon (through RTKit): without
+    # it the null sinks run on a normal thread and the bench drops cycles.
+    { name = libpipewire-module-rt
+        args = { nice.level = -11 rt.prio = 88 }
+        flags = [ ifexists nofail ] }
+    { name = libpipewire-module-protocol-native }
+    { name = libpipewire-module-profiler }
+    { name = libpipewire-module-metadata }
+    { name = libpipewire-module-spa-node-factory }
+    { name = libpipewire-module-client-node }
+    { name = libpipewire-module-access args = { } }
+    { name = libpipewire-module-adapter }
+    { name = libpipewire-module-link-factory }
+]
+
+context.objects = [
+    { factory = adapter
+        args = {
+            factory.name     = support.null-audio-sink
+            node.name        = fake_airpods
+            node.description = "AirPods (null sink)"
+            media.class      = Audio/Sink
+            audio.position   = [ FL FR ]
+            monitor.channel-volumes = false
+            node.driver      = true
+            priority.driver  = 30000
+            priority.session = 900
+            object.linger    = true
+        }
+    }
+    { factory = adapter
+        args = {
+            factory.name     = support.null-audio-sink
+            node.name        = fake_speakers
+            node.description = "Speakers (null sink)"
+            media.class      = Audio/Sink
+            audio.position   = [ FL FR ]
+            monitor.channel-volumes = false
+            node.driver      = true
+            priority.driver  = 20000
+            priority.session = 1000
+            object.linger    = true
+        }
+    }
+]

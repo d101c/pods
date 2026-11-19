@@ -1,0 +1,12 @@
+{
+  "uuid": "pods@d101c.github.io",
+  "name": "Pods",
+  "description": "AirPods work on Linux, but only as a plain Bluetooth headset: no battery per earbud, no noise control, no spatial audio. Pods brings these controls to Quick Settings.\n\n• Battery of each earbud and of the case\n• Noise control: Off, Transparency, Noise Cancellation, and Adaptive on the models that have it. A click on the tile switches modes, like a long press on the stem\n• The music pauses when you take an earbud out and resumes when you put it back\n• Open the case near the computer: a card shows the batteries, or a Connect button\n• Spatial audio: Fixed, or Head Tracked on AirPods with motion sensors, so the sound stays with your screen when you turn your head\n\nPods needs its engine, a small background service that is not part of this package. If it is missing, AirPods Settings offers to install it in your home folder in one click, without an administrator password. The download is checked against a fingerprint shipped with the extension, and Uninstall Engine removes it.\n\nTested with AirPods Pro (1st generation). Other models should work, and reports are welcome.\n\nAirPods is a trademark of Apple Inc. Pods is not affiliated with Apple.",
+  "shell-version": [
+    "51"
+  ],
+  "url": "https://github.com/d101c/pods",
+  "gettext-domain": "pods",
+  "settings-schema": "org.gnome.shell.extensions.pods",
+  "version-name": "0.1"
+}

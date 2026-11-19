@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- The settings of the extension itself. Those of the AirPods live in the
+     AirPods and go through the engine. -->
+<schemalist gettext-domain="pods">
+  <schema id="org.gnome.shell.extensions.pods" path="/org/gnome/shell/extensions/pods/">
+    <key name="show-case-card" type="b">
+      <default>true</default>
+      <summary>Show Card When Case Opens</summary>
+      <description>Shows the battery levels, or a Connect button, at the bottom of the screen when the case of paired AirPods opens nearby. Never over a fullscreen window or while the screen is shared.</description>
+    </key>
+    <key name="engine-install-offered" type="b">
+      <default>false</default>
+      <summary>Engine install offered</summary>
+      <description>Whether the one notification offering to install the AirPods engine was shown. It is shown once, the first time the engine is found missing; AirPods Settings keeps offering the install afterwards.</description>
+    </key>
+  </schema>
+</schemalist>

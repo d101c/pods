@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- A pair of AirPods Pro. Drawn by hand for pods: no Apple artwork. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="230" height="160" viewBox="0 0 230 160">
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#dcdce2"/></linearGradient>
+  </defs>
+  <ellipse cx="115" cy="150" rx="88" ry="6" fill="#000000" opacity="0.25"/>
+  <g transform="translate(112,4) scale(-1,1)">
+    <rect x="49" y="58" width="17" height="80" rx="8.5" transform="rotate(5 57 98)" fill="url(#body)" stroke="#c4c4ca"/>
+    <rect x="51.5" y="129" width="12" height="6" rx="3" transform="rotate(5 57 98)" fill="#b4b4bb"/>
+    <path d="M30 44C30 22 46 10 63 12C81 14 91 30 88 48C85 64 71 72 57 70C41 68 30 60 30 44Z" fill="url(#body)" stroke="#c4c4ca"/>
+    <ellipse cx="26" cy="41" rx="12" ry="15" fill="#ececf0" stroke="#c4c4ca"/>
+    <ellipse cx="21" cy="41" rx="4" ry="6.5" fill="#9b9ba3"/>
+    <ellipse cx="72" cy="25" rx="8" ry="4.2" transform="rotate(-28 72 25)" fill="#3c3c41"/>
+    <path d="M42 24C48 17 58 15 66 17" stroke="#ffffff" stroke-width="3" stroke-linecap="round" fill="none"/>
+  </g>
+  <g transform="translate(118,4)">
+    <rect x="49" y="58" width="17" height="80" rx="8.5" transform="rotate(5 57 98)" fill="url(#body)" stroke="#c4c4ca"/>
+    <rect x="51.5" y="129" width="12" height="6" rx="3" transform="rotate(5 57 98)" fill="#b4b4bb"/>
+    <path d="M30 44C30 22 46 10 63 12C81 14 91 30 88 48C85 64 71 72 57 70C41 68 30 60 30 44Z" fill="url(#body)" stroke="#c4c4ca"/>
+    <ellipse cx="26" cy="41" rx="12" ry="15" fill="#ececf0" stroke="#c4c4ca"/>
+    <ellipse cx="21" cy="41" rx="4" ry="6.5" fill="#9b9ba3"/>
+    <ellipse cx="72" cy="25" rx="8" ry="4.2" transform="rotate(-28 72 25)" fill="#3c3c41"/>
+    <path d="M42 24C48 17 58 15 66 17" stroke="#ffffff" stroke-width="3" stroke-linecap="round" fill="none"/>
+  </g>
+</svg>

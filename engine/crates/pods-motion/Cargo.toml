@@ -1,0 +1,11 @@
+[package]
+name = "pods-motion"
+description = "AirPods head tracking: sensor start and stop over AAP, yaw by twist about gravity, recentring and Follow Screen; pure, no I/O"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]

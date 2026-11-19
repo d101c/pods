@@ -1,0 +1,6 @@
+mat_person.svg, mat_spatial_tracking.svg and mat_360.svg come from Material Symbols
+(https://github.com/google/material-design-icons), Copyright Google LLC,
+licensed under the Apache License, Version 2.0
+(https://www.apache.org/licenses/LICENSE-2.0).
+The spatial audio icons of extension/icons (pods-spatial-*-symbolic.svg) are composed
+from them by tools/make-icons.py.

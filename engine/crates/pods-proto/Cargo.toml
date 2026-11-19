@@ -1,0 +1,11 @@
+[package]
+name = "pods-proto"
+description = "Apple Accessory Protocol frames for AirPods: pure encoding and decoding, no I/O"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]

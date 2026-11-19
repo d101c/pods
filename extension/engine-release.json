@@ -1,0 +1,10 @@
+{
+  "version": "0.1.0",
+  "assets": {
+    "x86_64": {
+      "url": "https://github.com/d101c/pods/releases/download/engine-0.1.0/pods-engine-0.1.0-x86_64.tar.gz",
+      "size": 0,
+      "sha256": ""
+    }
+  }
+}

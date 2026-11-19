@@ -1,0 +1,21 @@
+[package]
+name = "pods-spatial"
+description = "Spatial audio for the pods engine: a diffuse-field equalised binaural renderer, fixed or head-tracked, click-free"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+pipewire = "0.10"
+realfft = "3.5"
+libc.workspace = true
+tracing.workspace = true
+
+[build-dependencies]
+pkg-config = "0.3"
+
+[dev-dependencies]
+tempfile.workspace = true

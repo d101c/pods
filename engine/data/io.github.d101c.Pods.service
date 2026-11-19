@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=io.github.d101c.Pods
+Exec=@PODSD@
+SystemdService=pods-engine.service

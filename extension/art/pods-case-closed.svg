@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- AirPods Pro case, lid closed. Drawn by hand for pods: no Apple artwork. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="170" viewBox="0 0 220 170">
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#dcdce2"/></linearGradient>
+  </defs>
+  <ellipse cx="110" cy="162" rx="92" ry="6" fill="#000000" opacity="0.28"/>
+  <rect x="10" y="8" width="200" height="148" rx="54" fill="url(#body)" stroke="#c8c8ce"/>
+  <path d="M13.5 58H206.5" stroke="#cdcdd3" stroke-width="1.4"/>
+  <path d="M60 20C80 14 140 14 160 20" stroke="#ffffff" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <circle cx="110" cy="104" r="3.6" fill="#57e389"/>
+  <circle cx="110" cy="104" r="8" fill="#57e389" opacity="0.25"/>
+</svg>

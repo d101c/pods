@@ -1,0 +1,31 @@
+[workspace]
+resolver = "3"
+members = ["crates/pods-proto", "crates/pods-bt", "crates/pods-motion", "crates/pods-spatial", "crates/podsd"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/d101c/pods"
+publish = false
+
+[workspace.dependencies]
+pods-proto = { path = "crates/pods-proto" }
+pods-bt = { path = "crates/pods-bt" }
+pods-motion = { path = "crates/pods-motion" }
+pods-spatial = { path = "crates/pods-spatial" }
+tokio = { version = "1", default-features = false }
+zbus = { version = "6.1", default-features = false, features = ["tokio", "proxy", "service", "object-manager"] }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi"] }
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

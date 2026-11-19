@@ -1,0 +1,141 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+  Contract between the engine (podsd) and the GNOME Shell extension.
+  Bus: session. Well-known name: io.github.d101c.Pods
+  Manager object: /io/github/d101c/Pods
+  Device objects: /io/github/d101c/Pods/devices/<ADDRESS with "_" instead of ":">
+
+  Value vocabularies (lower-case ASCII strings):
+    noise modes     : "off", "transparency", "anc", "adaptive"
+    wearing         : "ear", "out", "case", "unknown"
+    battery parts   : "left", "right", "case"
+    spatial modes   : "off", "fixed", "head"
+    head tracking   : "unavailable", "idle", "starting", "active"
+    capabilities    : "noise.off", "noise.transparency", "noise.anc", "noise.adaptive",
+                      "conversation", "pressHold", "rename", "earDetection", "spatial.head"
+    change sources  : "stem", "tile", "other"
+
+  Errors: io.github.d101c.Pods1.Error.NotConnected, .NotSupported, .InvalidArgument, .Failed
+
+  All properties emit org.freedesktop.DBus.Properties.PropertiesChanged. Clients never poll.
+  M1 implements everything except the members marked "M2", "M3" or "M4": those exist,
+  keep their default values and their methods fail with NotSupported.
+-->
+<node>
+  <interface name="io.github.d101c.Pods1.Manager">
+    <property name="Devices" type="ao" access="read"/>
+    <!-- The AirPods currently connected over AAP, or "/" when none. -->
+    <property name="ActiveDevice" type="o" access="read"/>
+    <property name="EngineVersion" type="s" access="read"/>
+    <!-- Name of another AAP client seen on the AirPods (podctl, EarPort…), or "". -->
+    <property name="Conflict" type="s" access="read"/>
+    <!-- M2. snapshot keys (all optional): "name" s, "model" s, "color" s, "connected" b,
+         "left" y, "right" y, "case" y (percent), "leftCharging" b, "rightCharging" b,
+         "caseCharging" b, "budsInCase" y (0, 1 or 2). Sent once per lid opening, then again
+         at most every 2 s while the values change and the lid stays open. -->
+    <signal name="CaseOpened">
+      <arg name="device" type="o"/>
+      <arg name="snapshot" type="a{sv}"/>
+    </signal>
+    <!-- M2 -->
+    <signal name="CaseClosed">
+      <arg name="device" type="o"/>
+    </signal>
+  </interface>
+
+  <interface name="io.github.d101c.Pods1.Device">
+    <property name="Address" type="s" access="read"/>
+    <property name="Name" type="s" access="read"/>
+    <!-- Product id as "0x200E". -->
+    <property name="Model" type="s" access="read"/>
+    <!-- Human name, e.g. "AirPods Pro (1st generation)". -->
+    <property name="ModelName" type="s" access="read"/>
+    <property name="Firmware" type="s" access="read"/>
+    <!-- "white", "black"… or "" (M2, from the BLE advertisement). -->
+    <property name="Color" type="s" access="read"/>
+    <!-- True while the AAP link is open. -->
+    <property name="Connected" type="b" access="read"/>
+    <property name="Capabilities" type="as" access="read"/>
+    <!-- part -> (percent 0-100, charging). A part that is unknown is absent. -->
+    <property name="Battery" type="a{s(yb)}" access="read"/>
+    <!-- (left, right) -->
+    <property name="Wearing" type="(ss)" access="read"/>
+    <property name="NoiseMode" type="s" access="read"/>
+    <!-- Modes this model supports, in display order. -->
+    <property name="NoiseModes" type="as" access="read"/>
+    <!-- Modes the stem press-and-hold (and a click on the tile) cycles through. -->
+    <property name="PressHoldModes" type="as" access="read"/>
+    <property name="EarDetection" type="b" access="read"/>
+    <property name="PauseOnRemove" type="b" access="read"/>
+    <property name="ResumeOnReturn" type="b" access="read"/>
+    <!-- True while the engine holds media it paused because a bud left an ear. -->
+    <property name="MediaPaused" type="b" access="read"/>
+    <!-- Lowers media while you speak (models with the "conversation" capability). -->
+    <property name="ConversationAwareness" type="b" access="read"/>
+    <!-- M3 -->
+    <property name="SpatialMode" type="s" access="read"/>
+    <!-- M3. What the renderer is doing for SpatialMode: "off", "starting", "active",
+         "paused" (another app shares the audio, e.g. Listen Together), "failed". -->
+    <property name="SpatialStatus" type="s" access="read"/>
+    <!-- M4 -->
+    <property name="FollowScreen" type="b" access="read"/>
+    <!-- M4 -->
+    <property name="HeadTracking" type="s" access="read"/>
+
+    <method name="SetNoiseMode">
+      <arg name="mode" type="s" direction="in"/>
+    </method>
+    <!-- Next mode in PressHoldModes; what a click on the tile does. -->
+    <method name="CycleNoiseMode"/>
+    <method name="SetPressHoldModes">
+      <arg name="modes" type="as" direction="in"/>
+    </method>
+    <method name="Rename">
+      <arg name="name" type="s" direction="in"/>
+    </method>
+    <method name="SetEarDetection">
+      <arg name="enabled" type="b" direction="in"/>
+    </method>
+    <method name="SetPauseOnRemove">
+      <arg name="enabled" type="b" direction="in"/>
+    </method>
+    <method name="SetResumeOnReturn">
+      <arg name="enabled" type="b" direction="in"/>
+    </method>
+    <method name="SetConversationAwareness">
+      <arg name="enabled" type="b" direction="in"/>
+    </method>
+    <!-- M2: asks BlueZ to connect the AirPods (Connect button of the case card). -->
+    <method name="Connect"/>
+    <method name="Disconnect"/>
+    <!-- M3 -->
+    <method name="SetSpatialMode">
+      <arg name="mode" type="s" direction="in"/>
+    </method>
+    <!-- M4 -->
+    <method name="SetFollowScreen">
+      <arg name="enabled" type="b" direction="in"/>
+    </method>
+    <!-- M4 -->
+    <method name="Recenter"/>
+    <!-- M4: the settings window subscribes to HeadPose while it is open. -->
+    <method name="WatchHeadPose">
+      <arg name="watch" type="b" direction="in"/>
+    </method>
+
+    <signal name="NoiseModeChanged">
+      <arg name="mode" type="s"/>
+      <arg name="source" type="s"/>
+    </signal>
+    <signal name="LowBattery">
+      <arg name="part" type="s"/>
+      <arg name="percent" type="y"/>
+    </signal>
+    <!-- M4, at most 30 Hz, only while someone watches. Degrees, yaw positive to the left. -->
+    <signal name="HeadPose">
+      <arg name="yaw" type="d"/>
+      <arg name="pitch" type="d"/>
+    </signal>
+  </interface>
+</node>

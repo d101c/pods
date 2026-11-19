@@ -1,0 +1,146 @@
+pods engine (podsd, podsctl, pods-proto, pods-bt, pods-motion)
+Licensed under the GNU General Public License, version 3 or later.
+See COPYING.
+
+This file records where each part of the engine comes from.
+
+
+1. podctl — MIT OR Apache-2.0
+   https://github.com/Rockykln/podctl (version 0.4.0)
+   Copyright (c) 2026 pods contributors (the podctl authors)
+
+   podctl is used under its MIT licence. The MIT notice:
+
+     Permission is hereby granted, free of charge, to any person obtaining
+     a copy of this software and associated documentation files (the
+     "Software"), to deal in the Software without restriction, including
+     without limitation the rights to use, copy, modify, merge, publish,
+     distribute, sublicense, and/or sell copies of the Software, and to
+     permit persons to whom the Software is furnished to do so, subject to
+     the following conditions:
+
+     The above copyright notice and this permission notice shall be
+     included in all copies or substantial portions of the Software.
+
+     THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+     EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+     MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+     NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+     LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+     OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+     WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+   podctl's source files carry no per-file header; each derived file here
+   names its podctl origin in its own header.
+
+   Derived files:
+   - crates/pods-proto/src/aes.rs        from src/aes.rs (AES-128 block), unchanged
+   - crates/pods-proto/src/ble.rs        from src/ble.rs (address resolution
+                                         `ah`, the clear advertisement and its
+                                         tests on captures) and src/aap.rs
+                                         (proximity key reply layout)
+   - crates/pods-proto/src/frame.rs      from src/aap.rs (frame layout, opcodes)
+   - crates/pods-proto/src/message.rs    from src/aap.rs (battery and ear decoding)
+   - crates/pods-proto/src/model.rs      from src/caps.rs (product id table)
+   - crates/pods-proto/src/packet.rs     from src/bin/daemon/aap.rs
+                                         (handshake and feature-flag packets)
+   - crates/pods-bt/src/l2cap.rs         from src/l2cap.rs (raw L2CAP socket),
+                                         rewritten for tokio, with BT_SECURITY
+                                         and L2CAP_OPTIONS added
+   - crates/podsd/src/media.rs           from src/bin/daemon/media.rs
+                                         (pause/resume decisions), MPRIS only
+   - crates/podsd/src/link.rs            ideas from src/bin/daemon/{aap,link}.rs
+                                         (retry after connect, end-of-session
+                                         packet, reopening a mute link)
+
+   Not taken: podctl-popup, podctl-tray, the CLI, the installer, audio.rs
+   (pactl subprocesses), the bluetoothctl and dbus-send subprocesses.
+
+
+2. LibrePods (Android) — GPL-3.0-or-later
+   https://github.com/kavishdevar/librepods
+   Copyright (C) 2025 LibrePods contributors
+
+   Protocol facts taken from its documentation and Android sources
+   (docs/control_commands.md, docs/AAP Definitions.md,
+   android/.../bluetooth/AACPManager.kt):
+   - control identifiers and values (crates/pods-proto/src/control.rs)
+   - listening mode configuration mask 0x1A (control.rs, packet.rs)
+   - conversation detect control 0x28 (control.rs, packet.rs)
+   - proximity key request 0x30 / reply 0x31 (packet.rs, ble.rs)
+   - the encrypted part of the proximity advertisement (AES-128-ECB with
+     the ENC key as sent, levels in bytes 1-3), the colour and connection
+     bytes, the IRK byte order (android/.../BLEManager.kt,
+     utils/BluetoothCryptography.kt) (ble.rs)
+   - rename packet, opcode 0x1A (packet.rs)
+   - device information field order, opcode 0x1D (info.rs)
+   - battery status values, ear status values (message.rs, model.rs)
+
+   Nothing is taken from the linux/rust branch of LibrePods
+   (AGPL-3.0-only).
+
+
+3. Our own measurements
+   AirPods Pro (1st generation), product id 0x200E, A2084, firmware
+   6619472, probed on 19 November 2026 (study "M0"):
+   - the opening sequence and notification mask that work on this model
+   - listening mode values 1 off, 2 ANC, 3 transparency, accepted in 0.6 s
+   - no capabilities reply (0x02): capabilities come from the model table
+   - settings reported on connect: 0x0D, 0x1B, 0x24, 0x18, 0x17, 0x1F
+   - ear status 3 for a bud in the closed case, primary bud opcode 0x08
+   - the two information records (0x0D, 0x04) and which holds the firmware
+   - on the stem, with off, transparency and ANC enabled, the cycle
+     transparency -> off -> ANC (issue #14); the cycle (0x1A) is not
+     reported on connect
+   Test fixtures: crates/pods-proto/tests/fixtures/ (serial numbers, MAC
+   addresses, the owner's name and opcode 0x2B masked).
+
+
+4. MousePods and podtrack — Apache-2.0
+   MousePods: https://github.com/starman-tech/mousepods
+   Copyright 2026 Matteo Gaudioso (starman-tech)
+   podtrack (a Rust port of MousePods)
+   Copyright 2026 René Onier
+   Licence text: LICENSE-APACHE-2.0.
+
+   From MousePods' NOTICE: "This product includes software and research
+   developed by Matteo Gaudioso: the first public documentation of how
+   AirPods (3rd generation) expose their motion sensors through Apple
+   RemoteHID (HID over AACP), and the MousePods Linux head mouse built on
+   it." The findings are credited to "Matteo Gaudioso (starman-tech),
+   MousePods" (CC BY 4.0, docs/REMOTEHID-PROTOCOL.md); changes were made.
+
+   Used in crates/pods-motion, rewritten, with changes stated in each file:
+   - src/remotehid.rs   RemoteHID frame, sub-packet header, HostConnect,
+                        SetReport of the report interval, DeviceConnect
+                        AccessoryService (MousePods docs, podtrack
+                        protocol.rs)
+   - src/wx.rs          SensorDataWX ServiceSetting request and the minimal
+                        protobuf reader (podtrack protocol.rs, from
+                        MousePods airpods_mouse_controller.py)
+   - src/filter.rs      One-Euro filter (podtrack filter.rs; the filter is
+                        Casiez, Roussel and Vogel, CHI 2012)
+   - src/block.rs       layout of the 58-byte motion block (MousePods docs;
+                        clock offset and scales re-measured, see 5)
+
+   Not taken: the mouse, the games bridge, the GUI, calibration gestures.
+
+
+5. Our own measurements, head tracking (pods-motion)
+   AirPods Pro (1st generation), same pair, 19 November 2026 (M0 bis, ter,
+   quater; docs/ARCHITECTURE.md, Head tracking):
+   - sensors announced over RemoteHID only while sound plays to the buds;
+     SensorDataWX silent on this model
+   - report clock at byte 12 of the block in µs (19 892 µs apart for
+     20 000 µs asked), angular rate 1/512 rad/s, gravity 1/1024 g
+   - yaw as the twist of q_ref⁻¹·q about the reference gravity (the
+     Euler yaw is wrong for a tilted bud); sign and scale from the spoken
+     calibration; drift at rest
+   Test fixtures: crates/pods-motion/tests/fixtures/ (sensor frames only;
+   serial numbers and factory calibration in the plists masked).
+
+
+6. Rust crates
+   Dependencies are listed in Cargo.lock with their own licences
+   (tokio, zbus, futures-util, libc, serde, toml, tracing,
+   tracing-subscriber: MIT or MIT/Apache-2.0).

@@ -1,0 +1,26 @@
+[Unit]
+Description=pods engine (AirPods for GNOME)
+Documentation=https://github.com/d101c/pods
+# Started before the session bus, the engine would lose its name.
+After=dbus.service
+
+[Service]
+Type=dbus
+BusName=io.github.d101c.Pods
+ExecStart=%h/.local/lib/pods/podsd
+Restart=on-failure
+RestartSec=5
+Environment=RUST_LOG=info
+SyslogIdentifier=podsd
+
+# Hardening (as EarPort)
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+# Creates ~/.config/pods before sandboxing and keeps it writable.
+ConfigurationDirectory=pods
+ConfigurationDirectoryMode=0700
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

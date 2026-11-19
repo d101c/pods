@@ -1,0 +1,13 @@
+# Spoken calibration steps of M0 quater. Columns: step, index of the first
+# motion report of the step in m0-quater-motion.bin, seconds since the probe started.
+00-pret 197 6.667
+01-ecran 449 11.683
+02-gauche 702 16.700
+03-centre 1003 22.713
+04-droite 1256 27.726
+05-centre 1558 33.743
+06-haut 1810 38.763
+07-centre 2062 43.766
+08-immobile 2314 48.788
+09-fin 3321 68.803
+fin 3421 70.803
