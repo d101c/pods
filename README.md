@@ -33,8 +33,8 @@ Nothing is added to the top bar. Without connected AirPods, Pods shows nothing.
 
 ## Install
 
-1. Install the extension from [extensions.gnome.org](https://extensions.gnome.org)
-   (search for *Pods*). It needs GNOME Shell 51.
+1. Install the extension from [extensions.gnome.org](https://extensions.gnome.org/extension/11867/pods/)
+   (in review). It needs GNOME Shell 51.
 2. Pods needs its engine, a small background service (`podsd`). When it is missing,
    *AirPods Settings* offers an **Install Engine** button. It downloads the engine from
    this repository's releases, checks it against the SHA-256 fingerprint the extension
