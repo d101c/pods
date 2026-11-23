@@ -11,7 +11,7 @@ use tokio::time::Instant;
 use pods_proto::ble::{Advert, Level, Levels};
 use pods_proto::control::{self, id};
 use pods_proto::info::FIRMWARE_RECORD;
-use pods_proto::model::{UNKNOWN_MODEL, arrange, learn, next_in_cycle};
+use pods_proto::model::{CycleLearner, UNKNOWN_MODEL, arrange, next_in_cycle};
 use pods_proto::{
     Message, ModelSpec, NoiseMode, Part, Side, Wearing, model_for_number, model_for_product,
 };
@@ -23,6 +23,11 @@ use crate::spatial::{HeadState, SpatialMode, SpatialStatus};
 /// How long after our own order an echo of that mode counts as ours.
 /// The Pro 1 echoes within 0.6 s.
 pub const TILE_WINDOW: Duration = Duration::from_secs(5);
+
+/// How long after a bud went in or out a mode change is the buds' own
+/// doing. On the Pro 1 it follows the ear report within 70 ms
+/// (transparency → ANC with one bud out, off once both are out).
+pub const EAR_WINDOW: Duration = Duration::from_secs(1);
 
 /// Who changed the listening mode (the `source` of `NoiseModeChanged`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -117,7 +122,12 @@ pub struct DeviceState {
     pub pause_on_remove: bool,
     pub resume_on_return: bool,
     pub low_battery_alerts: bool,
-    pending: Option<(NoiseMode, Instant)>,
+    /// Modes we asked for, not echoed yet.
+    pending: Vec<(NoiseMode, Instant)>,
+    /// When a bud last went in or out.
+    ear_moved: Option<Instant>,
+    /// What the stem showed of the press-and-hold cycle.
+    pub cycle: CycleLearner,
     alerts: LowBattery,
     /// From the BLE advertisement ("" until seen).
     pub color: String,
@@ -156,7 +166,9 @@ impl DeviceState {
             pause_on_remove: true,
             resume_on_return: true,
             low_battery_alerts: true,
-            pending: None,
+            pending: Vec::new(),
+            ear_moved: None,
+            cycle: CycleLearner::default(),
             alerts: LowBattery::default(),
             color: String::new(),
             media_paused: false,
@@ -284,16 +296,39 @@ impl DeviceState {
         next_in_cycle(&self.press_hold_modes(), self.noise_mode)
     }
 
-    /// We are about to ask for `mode`: its echo is ours.
+    /// We are about to ask for `mode`: its echo is ours. Every order still
+    /// in flight is kept, so two quick clicks give two echoes of ours.
     pub fn expect_mode(&mut self, mode: NoiseMode, now: Instant) {
-        self.pending = Some((mode, now));
+        self.pending
+            .retain(|&(m, at)| m != mode && now.duration_since(at) <= TILE_WINDOW);
+        self.pending.push((mode, now));
+    }
+
+    /// Whether `mode` is the echo of one of our orders; uses it up, with
+    /// the older ones (overtaken).
+    fn take_pending(&mut self, mode: NoiseMode, now: Instant) -> bool {
+        let found = self
+            .pending
+            .iter()
+            .position(|&(m, at)| m == mode && now.duration_since(at) <= TILE_WINDOW);
+        if let Some(i) = found {
+            self.pending.drain(..=i);
+        }
+        found.is_some()
     }
 
     /// A new AAP session starts (also a silent reopen): the first mode
     /// it reports is a reading.
     pub fn begin_session(&mut self) {
         self.mode_seen = false;
-        self.pending = None;
+        self.forget_live();
+    }
+
+    /// What only holds within one session.
+    fn forget_live(&mut self) {
+        self.pending.clear();
+        self.ear_moved = None;
+        self.cycle.interrupt();
     }
 
     /// The link opened or closed. Readings of a closed link are dropped.
@@ -303,7 +338,7 @@ impl DeviceState {
         }
         self.connected = connected;
         self.mode_seen = false;
-        self.pending = None;
+        self.forget_live();
         let mut props = vec![Prop::Connected];
         if !connected {
             if !self.battery.is_empty() {
@@ -382,6 +417,12 @@ impl DeviceState {
             }
             Message::Ear { primary, secondary } => {
                 let before = self.wearing();
+                if self.ear.is_some_and(|e| e != (*primary, *secondary)) {
+                    // A bud went in or out (not the first report): the
+                    // buds may now change mode on their own.
+                    self.ear_moved = Some(now);
+                    self.cycle.interrupt();
+                }
                 self.ear = Some((*primary, *secondary));
                 self.wearing_outcome(before, &mut out);
             }
@@ -434,17 +475,25 @@ impl DeviceState {
 
     /// AirPods Pro (1st generation) never report their press-and-hold
     /// cycle (control 0x1A) on connect, and AAP has no way to ask for it:
-    /// the stem shows it, one press at a time (issue #14).
+    /// the stem shows it, one press at a time (issues #14 and #1). See
+    /// [`CycleLearner`] for what counts.
     fn learn_from_stem(&mut self, from: NoiseMode, to: NoiseMode, out: &mut Outcome) {
         let model = self.model();
-        if !model.press_hold || !model.noise_modes.contains(&to) {
+        if !model.press_hold
+            || !model.noise_modes.contains(&from)
+            || !model.noise_modes.contains(&to)
+        {
+            self.cycle.interrupt();
             return;
         }
-        if let Some(cycle) = learn(&self.press_hold_modes(), from, to) {
+        let Some(cycle) = self.cycle.stem(from, to) else {
+            return;
+        };
+        if self.press_hold_modes() != cycle {
             self.press_hold = Some(cycle);
             out.prop(Prop::PressHoldModes);
-            out.press_hold_learned = true;
         }
+        out.press_hold_learned = true;
     }
 
     fn wearing_outcome(&self, before: (Wearing, Wearing), out: &mut Outcome) {
@@ -461,10 +510,7 @@ impl DeviceState {
                 let Some(mode) = NoiseMode::from_wire(value[0]) else {
                     return;
                 };
-                let ours = matches!(self.pending, Some((m, at)) if m == mode && now.duration_since(at) <= TILE_WINDOW);
-                if ours {
-                    self.pending = None;
-                }
+                let ours = self.take_pending(mode, now);
                 let first = !self.mode_seen;
                 self.mode_seen = true;
                 if self.noise_mode == Some(mode) {
@@ -472,18 +518,33 @@ impl DeviceState {
                 }
                 let previous = self.noise_mode.replace(mode);
                 out.prop(Prop::NoiseMode);
-                if !first {
-                    let source = if ours { Source::Tile } else { Source::Stem };
-                    out.noise_changed = Some((mode, source));
-                    if !ours && let Some(from) = previous {
-                        self.learn_from_stem(from, mode, out);
-                    }
+                if first {
+                    // A reading, not a press.
+                    self.cycle.interrupt();
+                    return;
+                }
+                let by_ear = self
+                    .ear_moved
+                    .is_some_and(|at| now.duration_since(at) <= EAR_WINDOW);
+                let source = if ours {
+                    Source::Tile
+                } else if by_ear {
+                    Source::Other
+                } else {
+                    Source::Stem
+                };
+                out.noise_changed = Some((mode, source));
+                match (source, previous) {
+                    (Source::Stem, Some(from)) => self.learn_from_stem(from, mode, out),
+                    _ => self.cycle.interrupt(),
                 }
             }
             id::LISTENING_MODE_CONFIGS => {
                 // The mask says which modes, not in which order: keep the
                 // order already known.
                 let modes = arrange(&control::modes_of(value[0]), &self.press_hold_modes());
+                // The cycle may have changed: start counting presses again.
+                self.cycle.interrupt();
                 if modes.len() >= 2 && self.press_hold_modes() != modes {
                     self.press_hold = Some(modes);
                     out.prop(Prop::PressHoldModes);
@@ -770,51 +831,215 @@ mod tests {
         assert_eq!(s.next_mode(), Some(NoiseMode::Off));
     }
 
-    /// Issue #14: the real Pro 1 went transparency → off → ANC on the
-    /// stem while the engine believed transparency/ANC.
+    use NoiseMode::{Anc, Off, Transparency};
+
+    /// The real Pro 1 cycle (issue #14): transparency → off → ANC.
+    const REAL: [NoiseMode; 3] = [Off, Anc, Transparency];
+
+    fn ear(primary: Wearing, secondary: Wearing) -> Message {
+        Message::Ear { primary, secondary }
+    }
+
+    /// Stem presses one second apart from `t`; the outcomes.
+    fn presses(s: &mut DeviceState, t: Instant, modes: &[NoiseMode]) -> Vec<Outcome> {
+        modes
+            .iter()
+            .enumerate()
+            .map(|(i, &m)| s.apply(&mode(m), t + Duration::from_secs(i as u64 + 1)))
+            .collect()
+    }
+
+    /// Issues #14 and #1: a full tour of the stem teaches the real cycle,
+    /// and the tile then follows it.
     #[test]
     fn the_stem_teaches_the_real_cycle() {
         let mut s = pro1();
         let t = Instant::now();
-        s.apply(&mode(NoiseMode::Anc), t);
-        s.apply(&mode(NoiseMode::Transparency), t);
-        assert_eq!(
-            s.press_hold_modes(),
-            [NoiseMode::Transparency, NoiseMode::Anc]
+        s.apply(&mode(Anc), t);
+        assert_eq!(s.press_hold_modes(), [Transparency, Anc]);
+        let outs = presses(&mut s, t, &[Transparency, Off, Anc, Transparency]);
+        for o in &outs[..3] {
+            assert_eq!(o.noise_changed.unwrap().1, Source::Stem);
+            assert!(!o.press_hold_learned, "nothing before a full tour");
+            assert!(!o.props.contains(&Prop::PressHoldModes));
+        }
+        // ANC → transparency closes the tour started at transparency.
+        assert!(outs[3].props.contains(&Prop::PressHoldModes));
+        assert!(outs[3].press_hold_learned);
+        assert_eq!(s.press_hold_modes(), REAL);
+        // A click on the tile now follows the stem: transparency → off.
+        assert_eq!(s.next_mode(), Some(Off));
+        // Going on round confirms the order: nothing more to learn.
+        let outs = presses(
+            &mut s,
+            t + Duration::from_secs(10),
+            &[Off, Anc, Transparency],
         );
-        let out = s.apply(&mode(NoiseMode::Off), t);
-        assert_eq!(out.noise_changed, Some((NoiseMode::Off, Source::Stem)));
-        assert!(out.props.contains(&Prop::PressHoldModes));
-        assert!(out.press_hold_learned);
-        assert_eq!(
-            s.press_hold_modes(),
-            [NoiseMode::Off, NoiseMode::Anc, NoiseMode::Transparency]
+        assert!(outs.iter().all(|o| !o.press_hold_learned));
+    }
+
+    /// The session of 19 Nov 2026 (`airpods-study/seance`): the tile set
+    /// transparency, then the buds changed mode on their own as they went
+    /// out and back in, 0.1 to 70 ms after each ear report. 0.1 took these
+    /// for presses and learned off → transparency → ANC.
+    #[test]
+    fn mode_changes_after_a_bud_moves_are_not_presses() {
+        use Wearing::{Case, Ear, Out};
+        let mut s = pro1();
+        let t = Instant::now();
+        let at = |ms: u64| t + Duration::from_millis(ms);
+        s.apply(&ear(Ear, Ear), at(0));
+        s.apply(&mode(Anc), at(0));
+        s.expect_mode(Transparency, at(1_000));
+        let o = s.apply(&mode(Transparency), at(1_400));
+        assert_eq!(o.noise_changed, Some((Transparency, Source::Tile)));
+        // Milliseconds, then an ear report or a listening mode.
+        let steps = [
+            (19_247, ear(Ear, Out)),
+            (19_269, mode(Anc)),
+            (21_151, ear(Ear, Ear)),
+            (21_153, mode(Transparency)),
+            (28_873, ear(Out, Ear)),
+            (28_874, mode(Anc)),
+            (29_669, ear(Case, Ear)),
+            (30_688, ear(Case, Out)),
+            (30_741, mode(Off)),
+        ];
+        let mut changes = 0;
+        for (ms, msg) in steps {
+            let o = s.apply(&msg, at(ms));
+            if let Some((m, source)) = o.noise_changed {
+                assert_eq!(source, Source::Other, "{m:?} at {ms} ms");
+                assert!(!o.press_hold_learned, "{ms} ms");
+                changes += 1;
+            }
+        }
+        assert_eq!(changes, 4);
+        assert_eq!(s.press_hold_modes(), [Transparency, Anc]);
+        assert_eq!(s.cycle.retained(), None);
+        // Well after the last move, a change is the stem's again.
+        let o = s.apply(&mode(Anc), at(40_000));
+        assert_eq!(o.noise_changed, Some((Anc, Source::Stem)));
+    }
+
+    /// The same session, reconnecting with the buds going back in: the
+    /// first change after the link opens followed an ear report.
+    #[test]
+    fn putting_the_buds_back_teaches_nothing() {
+        use Wearing::{Case, Ear, Out};
+        let mut s = pro1();
+        let t = Instant::now();
+        let at = |ms: u64| t + Duration::from_millis(ms);
+        s.apply(&mode(Off), at(0));
+        s.set_connected(false);
+        s.set_connected(true);
+        s.apply(&ear(Out, Case), at(100));
+        s.apply(&mode(Off), at(100));
+        s.apply(&ear(Ear, Case), at(588));
+        s.apply(&ear(Case, Ear), at(1_678));
+        let o = s.apply(&mode(Anc), at(1_680));
+        assert_eq!(o.noise_changed, Some((Anc, Source::Other)));
+        s.apply(&ear(Out, Ear), at(1_808));
+        s.apply(&ear(Ear, Ear), at(2_342));
+        let o = s.apply(&mode(Transparency), at(2_406));
+        assert_eq!(o.noise_changed, Some((Transparency, Source::Other)));
+        assert_eq!(s.cycle.retained(), None);
+        assert_eq!(s.press_hold_modes(), [Transparency, Anc]);
+    }
+
+    #[test]
+    fn two_quick_clicks_echo_as_the_tile() {
+        let mut s = pro1();
+        let t = Instant::now();
+        s.apply(&mode(Off), t);
+        // CycleNoiseMode twice before the first echo.
+        s.expect_mode(Anc, t);
+        s.expect_mode(Transparency, t + Duration::from_millis(200));
+        let o = s.apply(&mode(Anc), t + Duration::from_millis(500));
+        assert_eq!(o.noise_changed, Some((Anc, Source::Tile)));
+        let o = s.apply(&mode(Transparency), t + Duration::from_millis(700));
+        assert_eq!(o.noise_changed, Some((Transparency, Source::Tile)));
+        // Both used up.
+        let o = s.apply(&mode(Off), t + Duration::from_secs(1));
+        assert_eq!(o.noise_changed, Some((Off, Source::Stem)));
+    }
+
+    #[test]
+    fn an_overtaken_order_is_dropped_with_the_echo_of_the_next() {
+        let mut s = pro1();
+        let t = Instant::now();
+        s.apply(&mode(Off), t);
+        // The buds only echo the last of two quick orders.
+        s.expect_mode(Anc, t);
+        s.expect_mode(Transparency, t);
+        let o = s.apply(&mode(Transparency), t + Duration::from_millis(500));
+        assert_eq!(o.noise_changed, Some((Transparency, Source::Tile)));
+        let o = s.apply(&mode(Anc), t + Duration::from_secs(1));
+        assert_eq!(o.noise_changed, Some((Anc, Source::Stem)));
+    }
+
+    /// Presses right after the tile: the first one only starts the run.
+    #[test]
+    fn only_presses_after_a_press_count() {
+        let mut s = pro1();
+        let t = Instant::now();
+        s.apply(&mode(Anc), t);
+        s.expect_mode(Transparency, t);
+        s.apply(&mode(Transparency), t);
+        // transparency → off → ANC, the tile back to transparency, off.
+        presses(&mut s, t, &[Off, Anc]);
+        s.expect_mode(Transparency, t + Duration::from_secs(3));
+        s.apply(&mode(Transparency), t + Duration::from_secs(3));
+        let outs = presses(
+            &mut s,
+            t + Duration::from_secs(3),
+            &[Off, Anc, Transparency],
         );
-        // A click on the tile now follows the stem: off → ANC.
-        assert_eq!(s.next_mode(), Some(NoiseMode::Anc));
-        // The next press confirms the order: nothing more to learn.
-        let out = s.apply(&mode(NoiseMode::Anc), t);
-        assert!(!out.press_hold_learned);
-        // Our own changes teach nothing.
-        s.expect_mode(NoiseMode::Off, t);
-        let out = s.apply(&mode(NoiseMode::Off), t);
-        assert_eq!(out.noise_changed, Some((NoiseMode::Off, Source::Tile)));
-        assert!(!out.press_hold_learned);
+        // Off → ANC → transparency → (off): not yet a tour.
+        assert!(outs.iter().all(|o| !o.press_hold_learned));
+        assert_eq!(s.cycle.retained(), None);
+        let outs = presses(&mut s, t + Duration::from_secs(10), &[Off]);
+        assert!(outs[0].press_hold_learned);
+        assert_eq!(s.press_hold_modes(), REAL);
+    }
+
+    /// What 0.1 may have saved: a wrong order. One contrary tour is not
+    /// enough to overturn it, two are.
+    #[test]
+    fn a_kept_order_gives_way_to_two_contrary_tours() {
+        let mut s = pro1();
+        let wrong = [Off, Transparency, Anc];
+        s.press_hold = Some(wrong.to_vec());
+        s.cycle = CycleLearner::new(Some(&wrong));
+        let t = Instant::now();
+        s.apply(&mode(Transparency), t);
+        let outs = presses(&mut s, t, &[Off, Anc, Transparency, Off]);
+        assert!(outs.iter().all(|o| !o.press_hold_learned));
+        assert_eq!(s.press_hold_modes(), wrong);
+        let outs = presses(
+            &mut s,
+            t + Duration::from_secs(10),
+            &[Anc, Transparency, Off],
+        );
+        assert!(outs[2].press_hold_learned);
+        assert_eq!(s.press_hold_modes(), REAL);
+        assert_eq!(s.next_mode(), Some(Anc));
     }
 
     #[test]
     fn the_first_reading_of_a_session_teaches_nothing() {
         let mut s = pro1();
         let t = Instant::now();
-        s.apply(&mode(NoiseMode::Transparency), t);
+        s.apply(&mode(Transparency), t);
+        presses(&mut s, t, &[Off, Anc]);
         s.set_connected(false);
         s.set_connected(true);
-        let out = s.apply(&mode(NoiseMode::Off), t);
-        assert!(!out.press_hold_learned);
-        assert_eq!(
-            s.press_hold_modes(),
-            [NoiseMode::Transparency, NoiseMode::Anc]
-        );
+        // Reconnected on transparency: a reading, then presses from it.
+        s.apply(&mode(Transparency), t + Duration::from_secs(5));
+        let outs = presses(&mut s, t + Duration::from_secs(5), &[Off, Anc]);
+        assert!(outs.iter().all(|o| !o.press_hold_learned));
+        assert_eq!(s.cycle.retained(), None);
+        assert_eq!(s.press_hold_modes(), [Transparency, Anc]);
     }
 
     #[test]

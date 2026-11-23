@@ -58,7 +58,7 @@ watchdog_secs = 60
 
 [devices."AA:BB:CC:DD:EE:FF"]
 press_hold_modes = ["transparency", "anc"]          # the user's choice
-press_hold_cycle = ["off", "anc", "transparency"]   # read from the buds
+press_hold_cycle = ["off", "anc", "transparency"]   # shown by the stem
 color = "white"
 ear_detection = true
 pause_on_remove = true
@@ -84,7 +84,8 @@ served objects match it member for member.
   `SetPressHoldModes`, `Rename`, `SetEarDetection`, `SetPauseOnRemove`,
   `SetResumeOnReturn`, `SetConversationAwareness`, `Connect`, `Disconnect`;
   signals `NoiseModeChanged(mode, source)` (`tile` when the order came
-  through the API, `stem` otherwise) and `LowBattery(part, percent)` (each
+  through the API, `other` when the buds changed mode on their own within
+  a second of a bud going in or out, `stem` otherwise) and `LowBattery(part, percent)` (each
   bud, once at 10 % and once at 5 %, re-armed by charging).
   Spatial audio and head tracking: `SpatialMode`, `SpatialStatus`,
   `FollowScreen`, `HeadTracking`; `SetSpatialMode`, `SetFollowScreen`,
@@ -121,11 +122,19 @@ podsctl follow-screen off
   item schema `io.github.d101c.Pods.ProximityKeys`). The keys are never
   written to a file or to the journal (a test captures every log line).
 - The press-and-hold cycle: the Pro 1 never reports it (control `0x1A`) on
-  connect and AAP has no read request, so the engine follows the stem: a
-  press that lands on a mode outside the known cycle, or out of its order,
-  corrects `PressHoldModes` and is kept in `press_hold_cycle`. A `0x1A`
-  report, when a model sends one, wins. `CycleNoiseMode` walks the same
-  cycle as the stem.
+  connect, and it cannot be read: `0x1A` is a bit mask with no order, the
+  buds only push control values (there is no read request, see LibrePods
+  `docs/control_commands.md`), and the stem-press report (`0x19`, enabled
+  by control `0x39`) replaces the buds' own action instead of describing
+  it. So the engine learns the order from the stem (`CycleLearner` in
+  `pods-proto`), and only from successive stem presses: a change of the
+  tile, a change within a second of a bud going in or out (the buds then
+  switch mode on their own), or the first reading of a session starts
+  over. An order is retained after a full tour, or once each transition
+  of a loop was seen twice; a retained one (`press_hold_cycle`) only gives
+  way to a contrary loop seen twice. A `0x1A` report, when a model sends
+  one, gives the members. `CycleNoiseMode` walks the same cycle as the
+  stem.
 - Capabilities come from a table per product id (the Pro 1 sends no `0x02`
   reply): AirPods Pro (1st generation) offer off, transparency and ANC.
 - When a bud comes out while audio goes to the AirPods (an active BlueZ

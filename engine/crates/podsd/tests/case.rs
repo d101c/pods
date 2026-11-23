@@ -460,9 +460,21 @@ async fn the_stem_shows_the_real_press_and_hold_cycle() {
         rig.device_prop::<Vec<String>>("PressHoldModes").await,
         ["transparency", "anc"]
     );
-    // What the real Pro 1 did: ANC → transparency → off.
+    // What the real Pro 1 does: ANC → transparency → off → ANC.
     rig.airpods.inject(set_noise_mode(Transparency));
     rig.airpods.inject(set_noise_mode(Off));
+    rig.airpods.inject(set_noise_mode(Anc));
+    eventually("followed", || async {
+        rig.device_prop::<String>("NoiseMode").await == "anc"
+    })
+    .await;
+    // Not a full tour yet (the first press only starts the run).
+    assert_eq!(
+        rig.device_prop::<Vec<String>>("PressHoldModes").await,
+        ["transparency", "anc"]
+    );
+    // Back to transparency: the tour is complete.
+    rig.airpods.inject(set_noise_mode(Transparency));
     eventually("learned", || async {
         rig.device_prop::<Vec<String>>("PressHoldModes").await == ["off", "anc", "transparency"]
     })
@@ -473,9 +485,9 @@ async fn the_stem_shows_the_real_press_and_hold_cycle() {
         flat.contains(r#"press_hold_cycle=["off","anc","transparency""#)
     })
     .await;
-    // A click on the tile goes where the stem would: off → ANC.
+    // A click on the tile goes where the stem would: transparency → off.
     rig.call("CycleNoiseMode", &()).await.unwrap();
-    assert_eq!(rig.airpods.received().last().unwrap(), &set_noise_mode(Anc));
+    assert_eq!(rig.airpods.received().last().unwrap(), &set_noise_mode(Off));
 }
 
 #[tokio::test(flavor = "multi_thread")]

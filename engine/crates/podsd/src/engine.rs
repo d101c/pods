@@ -14,7 +14,7 @@ use zbus::object_server::InterfaceRef;
 use zbus::wire::OwnedObjectPath;
 
 use pods_bt::{AapConnector, BatteryProvider, Bluez, BluezDevice, BluezEvent};
-use pods_proto::model::{arrange, canonical};
+use pods_proto::model::{CycleLearner, arrange, canonical};
 use pods_proto::{NoiseMode, product_from_modalias};
 
 use crate::api::{self, DeviceCtx, DeviceIface, ManagerCtx, ManagerIface};
@@ -375,6 +375,8 @@ impl Engine {
             words.iter().filter_map(|w| NoiseMode::parse(w)).collect()
         };
         let learned = d.press_hold_cycle.as_deref().map(parse).unwrap_or_default();
+        // Only consistent stem presses may overturn the order kept.
+        s.cycle = CycleLearner::new(Some(&learned));
         if let Some(words) = d.press_hold_modes {
             let modes = parse(&words);
             if modes.len() >= 2 {

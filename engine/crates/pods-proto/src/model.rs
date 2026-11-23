@@ -444,32 +444,129 @@ pub fn arrange(members: &[NoiseMode], hint: &[NoiseMode]) -> Vec<NoiseMode> {
     canonical(&out)
 }
 
-/// What a stem press from `from` to `to` teaches about `cycle`: `to`
-/// comes right after `from`. `None` when the cycle already says so (or
-/// says nothing about `from`).
-pub fn learn(cycle: &[NoiseMode], from: NoiseMode, to: NoiseMode) -> Option<Vec<NoiseMode>> {
-    if from == to {
-        return None;
+/// Net evidence a transition needs before it counts as known.
+const CONFIRMED: u8 = 2;
+/// Cap on that evidence, so that a cycle that really changed (another host
+/// rewrote the mask) is learned again after a few presses.
+const MAX_WEIGHT: u8 = 4;
+
+/// Learns the press-and-hold cycle from stem presses.
+///
+/// AAP gives no way to read the order the buds walk their modes in: the
+/// `0x1A` control is a bit mask, and the Pro 1 does not even report it on
+/// connect (issue #1). So the order is inferred, carefully, because the buds
+/// also change mode on their own when a bud goes in or out:
+///
+/// - only successive stem presses count: a press teaches `from → to` only
+///   when `from` was itself reached by the stem ([`CycleLearner::stem`]);
+///   anything else ([`CycleLearner::interrupt`]) starts a new run;
+/// - an order is retained after a full tour (the run comes back to a mode
+///   it already visited), or once every transition of a closed loop has
+///   been seen at least twice (net of contrary sightings);
+/// - a retained order is only replaced by such a loop seen twice; a single
+///   tour may only extend it (a new member, the known ones in the same
+///   order).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CycleLearner {
+    retained: Option<Vec<NoiseMode>>,
+    /// Successor of each mode as seen so far, and its net count.
+    next: [Option<(NoiseMode, u8)>; 4],
+    /// Modes reached by successive stem presses, oldest first.
+    run: Vec<NoiseMode>,
+}
+
+fn slot(m: NoiseMode) -> usize {
+    NoiseMode::ALL.iter().position(|&x| x == m).unwrap_or(0)
+}
+
+/// `a` and `b` walk the modes they share in the same cyclic order.
+fn same_order(a: &[NoiseMode], b: &[NoiseMode]) -> bool {
+    let ab: Vec<NoiseMode> = a.iter().filter(|m| b.contains(m)).copied().collect();
+    let ba: Vec<NoiseMode> = b.iter().filter(|m| a.contains(m)).copied().collect();
+    canonical(&ab) == canonical(&ba)
+}
+
+impl CycleLearner {
+    /// `retained`: an order kept from an earlier run (`press_hold_cycle`).
+    pub fn new(retained: Option<&[NoiseMode]>) -> Self {
+        Self {
+            retained: retained.filter(|c| c.len() >= 2).map(canonical),
+            ..Self::default()
+        }
     }
-    let mut c = cycle.to_vec();
-    match (c.iter().position(|&m| m == from), c.contains(&to)) {
-        (Some(i), false) => c.insert(i + 1, to),
-        (Some(i), true) => {
-            if c[(i + 1) % c.len()] == to {
+
+    /// The order retained, in canonical form.
+    pub fn retained(&self) -> Option<&[NoiseMode]> {
+        self.retained.as_deref()
+    }
+
+    /// The mode changed some other way (the tile, the buds themselves, a
+    /// new session): the next stem press starts a new run.
+    pub fn interrupt(&mut self) {
+        self.run.clear();
+    }
+
+    /// The stem went from `from` to `to`. Returns the new retained order
+    /// when this press changed it.
+    pub fn stem(&mut self, from: NoiseMode, to: NoiseMode) -> Option<Vec<NoiseMode>> {
+        if from == to {
+            return None;
+        }
+        if self.run.last() != Some(&from) {
+            // `from` was not reached by the stem: nothing to learn yet.
+            self.run = vec![to];
+            return None;
+        }
+        self.observe(from, to);
+        let tour = self.run.iter().position(|&m| m == to).map(|i| {
+            let t = canonical(&self.run[i..]);
+            self.run.clear();
+            t
+        });
+        self.run.push(to);
+        if let Some(c) = self.confirmed_loop(to)
+            && self.retained.as_ref() != Some(&c)
+        {
+            self.retained = Some(c.clone());
+            return Some(c);
+        }
+        let t = tour?;
+        let accept = match &self.retained {
+            None => true,
+            Some(r) => *r != t && r.iter().all(|m| t.contains(m)) && same_order(r, &t),
+        };
+        accept.then(|| {
+            self.retained = Some(t.clone());
+            t
+        })
+    }
+
+    fn observe(&mut self, from: NoiseMode, to: NoiseMode) {
+        let e = &mut self.next[slot(from)];
+        *e = match *e {
+            Some((n, w)) if n == to => Some((n, (w + 1).min(MAX_WEIGHT))),
+            Some((n, w)) if w > 1 => Some((n, w - 1)),
+            _ => Some((to, 1)),
+        };
+    }
+
+    /// The loop through `start` made of transitions seen at least twice.
+    fn confirmed_loop(&self, start: NoiseMode) -> Option<Vec<NoiseMode>> {
+        let mut path = vec![start];
+        loop {
+            let (n, w) = self.next[slot(*path.last()?)]?;
+            if w < CONFIRMED {
                 return None;
             }
-            c.retain(|&m| m != to);
-            let i = c.iter().position(|&m| m == from)?;
-            c.insert(i + 1, to);
+            if n == start {
+                return (path.len() >= 2).then(|| canonical(&path));
+            }
+            if path.contains(&n) {
+                return None;
+            }
+            path.push(n);
         }
-        (None, false) => {
-            c.push(to);
-            c = arrange(&c, cycle);
-        }
-        (None, true) => return None,
     }
-    let c = canonical(&c);
-    (c != cycle).then_some(c)
 }
 
 #[cfg(test)]
@@ -660,23 +757,132 @@ mod tests {
         assert_eq!(arrange(&[Transparency, Anc], &learned), [Transparency, Anc]);
     }
 
+    /// Feeds stem presses walking `modes`; returns the last order retained.
+    fn walk(l: &mut CycleLearner, modes: &[NoiseMode]) -> Option<Vec<NoiseMode>> {
+        let mut last = None;
+        for w in modes.windows(2) {
+            if let Some(c) = l.stem(w[0], w[1]) {
+                last = Some(c);
+            }
+        }
+        last
+    }
+
+    /// The real Pro 1 cycle (issue #14): transparency → off → ANC.
+    const REAL: [NoiseMode; 3] = [Off, Anc, Transparency];
+
     #[test]
-    fn stem_presses_teach_the_cycle() {
-        // The engine believed transparency/ANC; the stem went to off.
-        let c = learn(&[Transparency, Anc], Transparency, Off).unwrap();
-        assert_eq!(c, [Off, Anc, Transparency]);
-        // Then ANC after off: already known.
-        assert_eq!(learn(&c, Off, Anc), None);
-        // A press against the known order reorders it.
-        let c2 = learn(&c, Off, Transparency).unwrap();
-        assert_eq!(c2, [Off, Transparency, Anc]);
-        // From a mode outside the cycle, to one inside: nothing learned.
-        assert_eq!(learn(&[Transparency, Anc], Off, Anc), None);
-        // Neither in the cycle: the new one joins.
+    fn a_full_tour_is_retained() {
+        let mut l = CycleLearner::new(None);
+        // From transparency (set by the tile): the first press only starts
+        // the run, the order is known when the run comes back to off.
+        assert_eq!(l.stem(Transparency, Off), None);
+        assert_eq!(l.stem(Off, Anc), None);
+        assert_eq!(l.stem(Anc, Transparency), None);
+        assert_eq!(l.stem(Transparency, Off).unwrap(), REAL);
+        assert_eq!(l.retained().unwrap(), REAL);
+        // Going on round agrees: nothing new.
+        assert_eq!(walk(&mut l, &[Off, Anc, Transparency, Off, Anc]), None);
+    }
+
+    #[test]
+    fn a_partial_run_retains_nothing() {
+        let mut l = CycleLearner::new(None);
+        assert_eq!(walk(&mut l, &[Transparency, Off, Anc, Transparency]), None);
+        assert_eq!(l.retained(), None);
+    }
+
+    #[test]
+    fn interrupted_runs_add_up_twice_each_transition() {
+        let mut l = CycleLearner::new(None);
+        // Never a full tour: the tile or the buds in between each time.
+        assert_eq!(walk(&mut l, &[Transparency, Off, Anc, Transparency]), None);
+        l.interrupt();
+        assert_eq!(walk(&mut l, &[Anc, Transparency, Off]), None);
+        l.interrupt();
+        assert_eq!(walk(&mut l, &[Transparency, Off, Anc, Transparency]), None);
+        l.interrupt();
+        // Transparency → off is now known twice, like the other two: the
+        // loop is closed.
+        assert_eq!(walk(&mut l, &[Anc, Transparency, Off]).unwrap(), REAL);
+    }
+
+    #[test]
+    fn interruptions_break_the_run() {
+        let mut l = CycleLearner::new(None);
+        // What the 0.1 engine took for presses: transparency → off,
+        // the tile, then off → ANC → transparency → off would close a
+        // tour only if every step came from the stem.
+        assert_eq!(l.stem(Transparency, Off), None);
+        assert_eq!(l.stem(Off, Anc), None);
+        l.interrupt();
+        assert_eq!(l.stem(Anc, Transparency), None);
+        assert_eq!(l.stem(Transparency, Off), None);
+        assert_eq!(l.retained(), None);
+    }
+
+    #[test]
+    fn a_retained_order_resists_one_contrary_tour() {
+        // What 0.1 saved after a bud went in and out: the wrong order.
+        let wrong = [Off, Transparency, Anc];
+        let mut l = CycleLearner::new(Some(&wrong));
+        assert_eq!(l.retained().unwrap(), wrong);
+        // One real tour: not enough to overturn it.
         assert_eq!(
-            learn(&[Transparency, Anc], Adaptive, Off).unwrap(),
+            walk(&mut l, &[Transparency, Off, Anc, Transparency, Off]),
+            None
+        );
+        assert_eq!(l.retained().unwrap(), wrong);
+        // The second one is.
+        assert_eq!(walk(&mut l, &[Off, Anc, Transparency, Off]).unwrap(), REAL);
+    }
+
+    #[test]
+    fn one_stray_press_does_not_reorder() {
+        let mut l = CycleLearner::new(Some(&REAL));
+        walk(
+            &mut l,
+            &[Transparency, Off, Anc, Transparency, Off, Anc, Transparency],
+        );
+        // A change wrongly taken for a press: ANC → off, against the order.
+        assert_eq!(walk(&mut l, &[Transparency, Anc, Off]), None);
+        assert_eq!(l.retained().unwrap(), REAL);
+        assert_eq!(walk(&mut l, &[Off, Anc, Transparency, Off]), None);
+        assert_eq!(l.retained().unwrap(), REAL);
+    }
+
+    #[test]
+    fn a_two_mode_tour_does_not_drop_a_member_at_once() {
+        let mut l = CycleLearner::new(Some(&REAL));
+        // ANC ↔ transparency: a tour, but it would lose off.
+        assert_eq!(walk(&mut l, &[Off, Anc, Transparency, Anc]), None);
+        assert_eq!(l.retained().unwrap(), REAL);
+        // Twice more: the mask really lost off (another host changed it).
+        assert_eq!(
+            walk(&mut l, &[Anc, Transparency, Anc, Transparency, Anc]).unwrap(),
+            [Transparency, Anc]
+        );
+    }
+
+    #[test]
+    fn a_tour_may_add_a_member_in_the_known_order() {
+        let mut l = CycleLearner::new(Some(&[Transparency, Anc]));
+        assert_eq!(
+            walk(&mut l, &[Anc, Transparency, Off, Anc, Transparency]).unwrap(),
+            REAL
+        );
+    }
+
+    #[test]
+    fn a_kept_order_needs_two_modes() {
+        assert_eq!(CycleLearner::new(Some(&[Anc])).retained(), None);
+        assert_eq!(
+            CycleLearner::new(Some(&[Transparency, Off, Anc]))
+                .retained()
+                .unwrap(),
             [Off, Anc, Transparency]
         );
-        assert_eq!(learn(&c, Anc, Anc), None);
+        let mut l = CycleLearner::new(None);
+        assert_eq!(l.stem(Anc, Anc), None);
     }
 }
