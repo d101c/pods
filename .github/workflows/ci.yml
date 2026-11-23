@@ -38,5 +38,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gjs gir1.2-glib-2.0
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gjs gir1.2-glib-2.0 gir1.2-soup-3.0 gir1.2-gnomeautoar-0.1 gir1.2-gst-plugins-base-1.0 gir1.2-gstreamer-1.0
       - run: gjs -m extension/tools/test-model.js
