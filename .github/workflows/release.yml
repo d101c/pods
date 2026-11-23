@@ -1,0 +1,39 @@
+name: Engine release
+
+on:
+  push:
+    tags: ['engine-*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Engine ${{ matrix.arch }}
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: System libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libpipewire-0.3-dev libspa-0.2-dev libmysofa-dev libclang-dev pkg-config
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build and package
+        run: sh engine/scripts/make-release.sh
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" --title "Pods engine ${GITHUB_REF_NAME#engine-}" --notes "Built by CI."
+          gh release upload "$GITHUB_REF_NAME" engine/dist/*.tar.gz engine/dist/*.sha256 --clobber

@@ -162,9 +162,11 @@ expect('release: the archive of the architecture', releaseAsset(release, 'x86_64
     {version: '0.1.0', arch: 'x86_64', url: 'https://example.org/x.tar.gz', size: 10, sha256: sha});
 expect('release: none without a SHA-256 (not published yet)', releaseAsset(release, 'aarch64'), null);
 expect('release: none for another architecture', releaseAsset(release, 'riscv64'), null);
-expect('release: the one shipped is not published yet',
-    releaseAsset(readRelease(Gio.File.new_for_path(GLib.build_filenamev([GLib.path_get_dirname(
-        GLib.filename_from_uri(import.meta.url)[0]), '..'])))), null);
+const shipped = releaseAsset(readRelease(Gio.File.new_for_path(GLib.build_filenamev([GLib.path_get_dirname(
+    GLib.filename_from_uri(import.meta.url)[0]), '..']))), 'x86_64');
+expect('release: the one shipped is complete for x86_64',
+    [/^[0-9a-f]{64}$/.test(shipped?.sha256 ?? ''), shipped?.size > 0,
+        shipped?.url?.startsWith('https://github.com/d101c/pods/releases/download/engine-')], [true, true, true]);
 const refusal = await new EngineInstaller({...releaseAsset(release, 'x86_64'), url: 'http://example.org/x.tar.gz'})
     .install().then(() => null, e => [e.code, e.message]);
 expect('install: plain HTTP only to this computer', refusal, ['download', 'Not a secure address: http://example.org/x.tar.gz']);
