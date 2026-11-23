@@ -208,7 +208,7 @@ Yaw to sound (outside Bluetooth): the yaw is read once per cycle, then one
 cycle of crossfade, so a new angle is fully reached 21 to 43 ms after
 `set_yaw` at Q=1024.
 
-## 5. Supervisor in a real graph (36/36)
+## 5. Supervisor in a real graph (38/38)
 
 `bench.sh scenario`, both modes, with WirePlumber deciding the defaults:
 
@@ -222,7 +222,9 @@ cycle of crossfade, so a new angle is fully reached 21 to 43 ms after
 - the user picks another output: `Stopped(UserSwitched)`, their choice kept;
 - the AirPods node disappears: `Stopped(TargetGone)`, default restored, nodes
   gone;
-- tracked idle 3 s: 0 renderer cycles.
+- tracked idle 3 s: 0 renderer cycles;
+- no PipeWire error in any of these runs (issue #2: the AirPods node going
+  away used to leave link proxies that were destroyed twice).
 
 ## 6. SinkWatch: is sound flowing to the AirPods? (6/6)
 
@@ -231,6 +233,15 @@ start the head sensors only while sound plays) follows `fake_airpods` through
 its `info` events: seen idle (`Stopped`), `Running` while `pw-play` streams to
 it, `Stopped` again after the stream ends, `Running` on a second stream,
 `Gone` when the node is destroyed; no other node reported.
+
+## 7. Start and stop (issue #2) (9/9)
+
+`bench.sh cycles` (`CYCLES=20` by default): 20 starts and stops in each mode,
+pink noise playing into the spatial sink, the head turning in tracked mode.
+Every stop is `Stopped(Requested)`, the default goes back to `fake_speakers`,
+no spatial node is left, and no `PipeWire error … unknown resource N op:7` is
+logged (before the fix: five per stop, one per link and one for the sink,
+each proxy being destroyed twice).
 
 ## Limits
 
@@ -254,7 +265,7 @@ it, `Stopped` again after the stream ends, `Running` on a second stream,
 ```
 cd engine
 cargo build --release -p pods-spatial --examples
-crates/pods-spatial/bench/bench.sh   # smoke rt idle clicks latency tone azimuths scenario sinks, ~20 min
+crates/pods-spatial/bench/bench.sh   # smoke rt idle clicks latency tone azimuths scenario cycles sinks, ~25 min
 python3 -I crates/pods-spatial/bench/analyze.py crates/pods-spatial/bench/results
 ps -ef | grep -E 'pods-sb|spatial_bench|pods-spatial-bench' | grep -v grep   # must be empty
 ```

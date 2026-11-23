@@ -502,6 +502,7 @@ dependencies = [
  "realfft",
  "tempfile",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

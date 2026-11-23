@@ -19,3 +19,4 @@ pkg-config = "0.3"
 
 [dev-dependencies]
 tempfile.workspace = true
+tracing-subscriber.workspace = true

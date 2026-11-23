@@ -100,7 +100,9 @@ impl State {
             match a {
                 Action::ClaimDefault => self.claim_default(),
                 Action::RestoreDefault => self.restore_default(),
-                Action::Teardown => self.teardown(),
+                // The nodes go once the loop is left (see `teardown`); the
+                // renderer stops turning the sound now.
+                Action::Teardown => self.tracking.store(false, Ordering::Relaxed),
             }
         }
         self.publish();
@@ -155,19 +157,33 @@ impl State {
         }
     }
 
+    /// Removes our nodes and links, once the main loop is left and a round
+    /// trip has brought every pending event in (issue #2):
+    ///
+    /// - dropping a proxy is enough: it asks the server to destroy the
+    ///   object (`core.destroy`, opcode 7). Calling `Core::destroy_object`
+    ///   as well sent that request twice, and the second one, for an id the
+    ///   server had already freed, came back as "unknown resource N op:7";
+    /// - when the AirPods node goes, the server destroys the links to it
+    ///   after announcing the node gone. Released right then, their proxies
+    ///   still looked alive and were destroyed a second time; after the
+    ///   round trip their `remove_id` has arrived and dropping them sends
+    ///   nothing.
     fn teardown(&mut self) {
         self.tracking.store(false, Ordering::Relaxed);
-        match std::mem::replace(&mut self.backend, Backend::None) {
-            Backend::None => {}
-            Backend::Running(t) => {
-                for l in t.links {
-                    let _ = self.core.destroy_object(l);
-                }
-                drop(t.filter);
-                if let Some(s) = t.sink {
-                    let _ = self.core.destroy_object(s);
-                }
-            }
+        if let Backend::Running(t) = std::mem::replace(&mut self.backend, Backend::None) {
+            // Links first, then the nodes they join.
+            drop(t.links);
+            drop(t.filter);
+            drop(t.sink);
+        }
+    }
+
+    /// Lets go of the default metadata: its listener before its proxy.
+    fn release_meta(&mut self) {
+        if let Some((_, meta, listener)) = self.meta.take() {
+            drop(listener);
+            drop(meta);
         }
     }
 
@@ -256,7 +272,7 @@ impl State {
         }
         self.ports.remove(&id);
         if self.meta.as_ref().is_some_and(|(mid, _, _)| *mid == id) {
-            self.meta = None;
+            self.release_meta();
         }
     }
 
@@ -524,12 +540,13 @@ fn run_inner(cfg: Config, cmd_rx: pw::channel::Receiver<Cmd>, init_tx: &SyncSend
         mainloop.run();
     }
 
-    // Make sure the restored default reached the server before leaving.
+    // Make sure the restored default reached the server, and that what the
+    // server destroyed on its own is known gone, before releasing anything.
     let _ = roundtrip(&mainloop, &core, Duration::from_secs(2));
     {
         let mut s = st.borrow_mut();
         s.teardown();
-        s.meta = None;
+        s.release_meta();
     }
     let _ = roundtrip(&mainloop, &core, Duration::from_secs(1));
     Ok(())

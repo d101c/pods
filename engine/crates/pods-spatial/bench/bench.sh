@@ -3,7 +3,7 @@
 # It never talks to the session's PipeWire: see lib.sh for the guards.
 #
 #   cargo build --release -p pods-spatial --examples
-#   crates/pods-spatial/bench/bench.sh [smoke] [rt] [idle] [clicks] [latency] [tone] [azimuths] [scenario] [sinks]   (default: all)
+#   crates/pods-spatial/bench/bench.sh [smoke] [rt] [idle] [clicks] [latency] [tone] [azimuths] [scenario] [cycles] [sinks]   (default: all)
 #   python3 -I crates/pods-spatial/bench/analyze.py crates/pods-spatial/bench/results
 #
 # Results in bench/results/ (or $BENCH_RESULTS): WAV recordings, logs,
@@ -139,7 +139,7 @@ record_io() {
     [ "$mode" != none ] && stop_spatial
 }
 
-SEL="${*:-smoke rt idle clicks latency tone azimuths scenario sinks}"
+SEL="${*:-smoke rt idle clicks latency tone azimuths scenario cycles sinks}"
 sel() { [[ " $SEL " == *" $1 "* ]]; }
 
 if sel smoke; then
@@ -338,8 +338,45 @@ print("%.1f" % (10*np.log10(np.mean(x**2)+1e-20)))' "$1" "$B"
         sleep 0.3
         check "$mode: AirPods gone restores the default (fake_speakers)" default_is fake_speakers
         check "$mode: AirPods gone removes the spatial nodes" no_spatial_nodes
+        check "$mode: no PipeWire error logged (issue #2)" bash -c "! cat '$OUT/$mode'-*.log | grep -q 'PipeWire error'"
         stop_all; sleep 0.5
     done
+    echo "== $(grep -c '^ok' "$REPORT") ok, $(grep -c '^FAIL' "$REPORT") failed" | tee -a "$REPORT"
+fi
+if sel cycles; then
+    # Start and stop, sound playing, $CYCLES times (default 20) in each mode:
+    # every stop must leave a clean graph and log no PipeWire error (issue #2:
+    # "unknown resource N op:7" when a proxy outlived its server object).
+    Q=1024; OUT="$RES/cycles"; rm -rf "$OUT"; mkdir -p "$OUT"
+    REPORT="$OUT/cycles.txt"; : > "$REPORT"
+    check() {   # check <label> <command...>
+        local label="$1"; shift
+        if "$@"; then echo "ok    $label" | tee -a "$REPORT"; else echo "FAIL  $label" | tee -a "$REPORT"; fi
+    }
+    default_is() { [ "$(graph default | cut -d' ' -f1)" = "$1" ]; }
+    no_spatial_nodes() { ! graph has-node spatial_airpods && ! graph has-node spatial_airpods.output; }
+    N="${CYCLES:-20}"
+    start_daemon 1024 "$OUT"
+    for mode in tracked fixed; do
+        for i in $(seq "$N"); do
+            start_spatial "$mode" "$mode-$i" --traj sine --rate 50
+            pwp_bg pw-play --target spatial_airpods -P '{ node.name=bench_play }' "$SIG/pink.wav" >/dev/null 2>&1 &
+            PL=$!
+            sleep 1
+            stop_spatial
+            kill -TERM "$PL" 2>/dev/null; wait "$PL" 2>/dev/null
+        done
+        sleep 0.3
+        logs=("$OUT/$mode"-*.log)
+        stopped="$(cat "${logs[@]}" | grep -c '^STOPPED .*Stopped(Requested)')"
+        errors="$(cat "${logs[@]}" | grep -c 'PipeWire error')"
+        check "$mode: $N start/stop cycles, $stopped stopped on request" [ "$stopped" -eq "$N" ]
+        check "$mode: $errors PipeWire error(s) logged" [ "$errors" -eq 0 ]
+        check "$mode: the default is fake_speakers again" default_is fake_speakers
+        check "$mode: no spatial node left" no_spatial_nodes
+    done
+    check "the private daemon is still ours" check_private
+    stop_all; sleep 0.5
     echo "== $(grep -c '^ok' "$REPORT") ok, $(grep -c '^FAIL' "$REPORT") failed" | tee -a "$REPORT"
 fi
 if sel sinks; then

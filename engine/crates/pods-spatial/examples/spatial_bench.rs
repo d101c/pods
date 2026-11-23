@@ -64,6 +64,9 @@ fn main() {
     let Some(cmd) = argv.first().cloned() else { die("usage: spatial_bench run|watch-sinks ...") };
     let args = Args(argv);
     let core = bench_core();
+    // The library's warnings (PipeWire errors included) go to stderr, in
+    // the case log, where the bench counts them.
+    tracing_subscriber::fmt().with_writer(std::io::stderr).with_ansi(false).init();
     match cmd.as_str() {
         "run" => run(&args, core),
         "watch-sinks" => watch_sinks(&args, core),
